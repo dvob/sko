@@ -16,6 +16,11 @@ import (
 	"github.com/peterbourgon/ff/v3"
 )
 
+var (
+	version = "n/a"
+	commit  = "n/a"
+)
+
 type Options struct {
 	// credentials which are used to push the image
 	User     string
@@ -52,6 +57,10 @@ func main() {
 	}
 }
 
+func printVersion() {
+	fmt.Printf("version: %s commit: %s\n", version, commit)
+}
+
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: sko <image> <path>\n")
 	fmt.Fprintf(os.Stderr, "options:\n")
@@ -67,7 +76,10 @@ func run(ctx context.Context) error {
 		Platform:  "linux/amd64",
 	}
 
+	version := false
+
 	flag.Usage = usage
+	flag.BoolVar(&version, "version", version, "Show version and exit.")
 	flag.BoolVar(&opts.Local, "local", opts.Local, "Load image into local docker daemon and do not push to Docker registry.")
 	flag.StringVar(&opts.Tar, "tar", "", "Save image to tar file instead of pushing it somewhere.")
 	flag.StringVar(&opts.BaseImage, "base", opts.BaseImage, "Base image.")
@@ -79,6 +91,11 @@ func run(ctx context.Context) error {
 	ff.Parse(flag.CommandLine, os.Args[1:],
 		ff.WithEnvVarPrefix("SKO"),
 	)
+
+	if version {
+		printVersion()
+		os.Exit(0)
+	}
 
 	if flag.NArg() != 2 {
 		usage()

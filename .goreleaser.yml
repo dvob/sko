@@ -1,0 +1,12 @@
+builds:
+- ldflags:
+  - -X main.version=v{{.Version}}
+  - -X main.commit={{.Commit}}
+  goos:
+  - linux
+  - darwin
+  - windows
+checksum:
+  name_template: 'checksums.txt'
+changelog:
+  sort: asc
