@@ -8,7 +8,6 @@ go install github.com/dvob/sko@latest
 ```
 
 ## Usage
-```
 Build and upload to local docker daemon:
 ```
 sko -local dvob/http-server .

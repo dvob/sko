@@ -13,13 +13,17 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/ko/pkg/build"
 	"github.com/google/ko/pkg/publish"
+	"github.com/peterbourgon/ff/v3"
 )
 
 type Options struct {
+	// credentials which are used to push the image
+	User     string
+	Password string
+
 	ImageName  string
 	ImportPath string
 	BaseImage  string
-	Push       bool
 	// Load into local docker daemon and to not push to remote registry
 	Local    bool
 	Tar      string
@@ -61,7 +65,6 @@ func run(ctx context.Context) error {
 	opts := Options{
 		BaseImage: "gcr.io/distroless/static:nonroot",
 		Platform:  "linux/amd64",
-		Push:      true,
 	}
 
 	flag.Usage = usage
@@ -69,9 +72,13 @@ func run(ctx context.Context) error {
 	flag.StringVar(&opts.Tar, "tar", "", "Save image to tar file instead of pushing it somewhere.")
 	flag.StringVar(&opts.BaseImage, "base", opts.BaseImage, "Base image.")
 	flag.StringVar(&opts.Platform, "platform", opts.Platform, "Platform.")
+	flag.StringVar(&opts.User, "user", opts.User, "Docker registry user which is used for push.")
+	flag.StringVar(&opts.Password, "password", opts.Password, "Docker registry password which is used for push.")
 	flag.Var(&opts.Tags, "tag", "Tags to publish. This option can be used multiple times. If not specified latest is used")
 
-	flag.Parse()
+	ff.Parse(flag.CommandLine, os.Args[1:],
+		ff.WithEnvVarPrefix("SKO"),
+	)
 
 	if flag.NArg() != 2 {
 		usage()
@@ -88,6 +95,14 @@ func run(ctx context.Context) error {
 	logs.Progress.SetOutput(os.Stderr)
 
 	return buildAndPublish(ctx, opts)
+}
+
+type singleAuthKeyChain struct {
+	auth authn.Authenticator
+}
+
+func (s *singleAuthKeyChain) Resolve(authn.Resource) (authn.Authenticator, error) {
+	return s.auth, nil
 }
 
 func buildAndPublish(ctx context.Context, opts Options) error {
@@ -134,6 +149,17 @@ func buildAndPublish(ctx context.Context, opts Options) error {
 
 	publishers := []publish.Interface{}
 
+	auth := authn.DefaultKeychain
+	if opts.User != "" && opts.Password != "" {
+		logs.Progress.Print("use credentials -user and -password")
+		auth = &singleAuthKeyChain{
+			auth: authn.FromConfig(authn.AuthConfig{
+				Username: opts.User,
+				Password: opts.Password,
+			}),
+		}
+	}
+
 	if opts.Tar != "" {
 		publishers = append(publishers, publish.NewTarball(opts.Tar, opts.ImageName, ignoreImportPathNamer, opts.Tags))
 	} else if opts.Local {
@@ -141,7 +167,7 @@ func buildAndPublish(ctx context.Context, opts Options) error {
 	} else {
 		defaultPublisher, err := publish.NewDefault(opts.ImageName,
 			publish.WithUserAgent("sko"),
-			publish.WithAuthFromKeychain(authn.DefaultKeychain),
+			publish.WithAuthFromKeychain(auth),
 			publish.WithNamer(ignoreImportPathNamer),
 			publish.WithTags(opts.Tags))
 		if err != nil {
